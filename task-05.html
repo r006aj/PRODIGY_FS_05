@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>e-Social Media</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #000000;
+      --card: #f9f9f9;
+    }
+    body.dark {
+      --bg: #1a1a1a;
+      --text: #f5f5f5;
+      --card: #2a2a2a;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+      transition: background 0.3s, color 0.3s;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: var(--card);
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2, h3 { text-align: center; }
+    input, textarea, button, select {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    .post, .comment {
+      background: var(--bg);
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 15px;
+    }
+    .comment small { display: block; color: #888; }
+    .post img { max-width: 100%; border-radius: 5px; margin-top: 10px; }
+    .profile-pic {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .toggle-dark { float: right; cursor: pointer; }
+    .action-btns button {
+      margin-right: 10px;
+      background: #eee;
+      border: none;
+      cursor: pointer;
+    }
+    .hidden { display: none; }
+    .bio-section {
+      font-style: italic;
+      color: #666;
+      margin-top: -10px;
+    }
+    .logout-btn {
+      float: right;
+      background: #ff4d4d;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #28a745;
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="loginBox">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="pin" placeholder="4-digit PIN" maxlength="4">
+    <button onclick="login()">Login</button>
+  </div>
+
+  <div class="container hidden" id="mainBox">
+    <div class="header">
+      <h2>Welcome, <span id="userLabel"></span></h2>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+    <div>
+      <label>Upload Avatar:</label>
+      <input type="file" id="avatarUpload" accept="image/*" onchange="saveAvatar()">
+      <label>Bio:</label>
+      <textarea id="bioInput" placeholder="Your bio..." onchange="saveBio()"></textarea>
+      <label>New Post:</label>
+      <textarea id="postText" placeholder="What's on your mind?"></textarea>
+      <input type="file" id="imageInput" accept="image/*">
+      <button onclick="createPost()">Post</button>
+    </div>
+    <hr>
+    <h3>Feed</h3>
+    <select id="sortOption" onchange="loadFeed()">
+      <option value="newest">Newest</option>
+      <option value="oldest">Oldest</option>
+      <option value="likes">Most Liked</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="Search posts..." oninput="loadFeed()">
+    <div id="feed"></div>
+  </div>
+
+  <div class="toast" id="toastMsg">Post updated!</div>
+
+  <script>
+    let currentUser = '';
+    let currentAvatar = '';
+    let users = JSON.parse(localStorage.getItem('users')) || {};
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastMsg');
+      toast.textContent = msg;
+      toast.style.display = 'block';
+      setTimeout(() => toast.style.display = 'none', 2000);
+    }
+
+    function login() {
+      const user = document.getElementById('username').value.trim();
+      const pin = document.getElementById('pin').value.trim();
+      if (!user || pin.length !== 4) return alert('Enter valid credentials');
+      if (users[user] && users[user].pin !== pin) return alert('Wrong PIN');
+      if (!users[user]) users[user] = { pin, bio: '', avatar: '' };
+      currentUser = user;
+      currentAvatar = users[user].avatar;
+      localStorage.setItem('users', JSON.stringify(users));
+      document.getElementById('loginBox').classList.add('hidden');
+      document.getElementById('mainBox').classList.remove('hidden');
+      document.getElementById('userLabel').textContent = currentUser;
+      document.getElementById('bioInput').value = users[user].bio;
+      loadFeed();
+    }
+
+    function logout() {
+      location.reload();
+    }
+
+    function saveBio() {
+      users[currentUser].bio = document.getElementById('bioInput').value.trim();
+      localStorage.setItem('users', JSON.stringify(users));
+    }
+
+    function saveAvatar() {
+      const file = document.getElementById('avatarUpload').files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        users[currentUser].avatar = reader.result;
+        localStorage.setItem('users', JSON.stringify(users));
+        currentAvatar = reader.result;
+        showToast("Avatar updated");
+      };
+      if (file) reader.readAsDataURL(file);
+    }
+
+    function createPost() {
+      const text = document.getElementById('postText').value.trim();
+      const file = document.getElementById('imageInput').files[0];
+      if (!text && !file) return;
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const posts = JSON.parse(localStorage.getItem('posts')) || [];
+        posts.unshift({
+          id: Date.now(),
+          user: currentUser,
+          text,
+          time: new Date().toLocaleString(),
+          image: file ? reader.result : '',
+          likes: [],
+          comments: []
+        });
+        localStorage.setItem('posts', JSON.stringify(posts));
+        document.getElementById('postText').value = '';
+        document.getElementById('imageInput').value = '';
+        loadFeed();
+        showToast("Post created");
+      };
+      if (file) reader.readAsDataURL(file);
+      else reader.onloadend();
+    }
+
+    function loadFeed() {
+      const posts = JSON.parse(localStorage.getItem('posts')) || [];
+      const sort = document.getElementById('sortOption').value;
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      if (sort === 'oldest') posts.sort((a,b)=>a.id-b.id);
+      if (sort === 'likes') posts.sort((a,b)=>b.likes.length-a.likes.length);
+      const filtered = posts.filter(p => p.text.toLowerCase().includes(search) || p.user.toLowerCase().includes(search));
+      const feed = document.getElementById('feed');
+      feed.innerHTML = '';
+      filtered.forEach(p => {
+        const div = document.createElement('div');
+        const avatar = users[p.user]?.avatar || '';
+        const bio = users[p.user]?.bio || '';
+        div.className = 'post';
+        div.innerHTML = `
+          <div style="display:flex;align-items:center;gap:10px;">
+            ${avatar ? `<img src="${avatar}" class="profile-pic">` : ''}
+            <div><strong>${p.user}</strong><div class='bio-section'>${bio}</div></div>
+          </div>
+          <small>${p.time}</small>
+          <p>${p.text}</p>
+          ${p.image ? `<img src="${p.image}">` : ''}
+          <div><button onclick="likePost(${p.id})">${p.likes.includes(currentUser) ? '❤️' : '🤍'} ${p.likes.length} Likes</button></div>
+          <div><input type="text" placeholder="Comment..." onkeypress="if(event.key==='Enter') addComment(${p.id}, this)"></div>
+          <div>${p.comments.map((c, i)=>`<div class='comment'><strong>${c.user}:</strong> ${c.text} ${c.user===currentUser?`<button onclick='deleteComment(${p.id},${i})'>✖</button>`:''}</div>`).join('')}</div>
+        `;
+        feed.appendChild(div);
+      });
+    }
+
+    function likePost(id) {
+      const posts = JSON.parse(localStorage.getItem('posts')) || [];
+      const post = posts.find(p=>p.id===id);
+      if (!post) return;
+      const idx = post.likes.indexOf(currentUser);
+      if (idx === -1) post.likes.push(currentUser);
+      else post.likes.splice(idx,1);
+      localStorage.setItem('posts', JSON.stringify(posts));
+      loadFeed();
+    }
+
+    function addComment(id, input) {
+      const text = input.value.trim();
+      if (!text) return;
+      const posts = JSON.parse(localStorage.getItem('posts')) || [];
+      const post = posts.find(p=>p.id===id);
+      if (!post) return;
+      post.comments.push({ user: currentUser, text });
+      localStorage.setItem('posts', JSON.stringify(posts));
+      input.value = '';
+      loadFeed();
+    }
+
+    function deleteComment(postId, commentIndex) {
+      const posts = JSON.parse(localStorage.getItem('posts')) || [];
+      const post = posts.find(p=>p.id===postId);
+      if (!post) return;
+      post.comments.splice(commentIndex,1);
+      localStorage.setItem('posts', JSON.stringify(posts));
+      loadFeed();
+    }
+  </script>
+</body>
+</html>
